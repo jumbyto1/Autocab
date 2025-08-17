@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>GPS Live Test - CABCO Driver App</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #000;
+            color: #fff;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .section {
+            background: #222;
+            padding: 20px;
+            margin: 10px 0;
+            border-radius: 8px;
+        }
+        button {
+            background: #ff6b35;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #e55a2b;
+        }
+        input {
+            padding: 8px;
+            margin: 5px;
+            border-radius: 4px;
+            border: none;
+        }
+        #status {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        #log {
+            background: #111;
+            padding: 10px;
+            height: 300px;
+            overflow-y: scroll;
+            border: 1px solid #444;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚗 GPS Live Test - CABCO Driver App</h1>
+        
+        <div class="section">
+            <h3>📡 WebSocket Connection</h3>
+            <div id="status">Disconnected</div>
+            <button onclick="connect()">Connect to GPS Live</button>
+            <button onclick="disconnect()">Disconnect</button>
+        </div>
+
+        <div class="section">
+            <h3>📍 Send GPS Update</h3>
+            <label>Vehicle ID:</label>
+            <input type="text" id="vehicleId" value="900" placeholder="Vehicle ID">
+            <br>
+            <label>Latitude:</label>
+            <input type="number" id="latitude" value="51.700000" step="0.000001" placeholder="Latitude">
+            <br>
+            <label>Longitude:</label>
+            <input type="number" id="longitude" value="1.600000" step="0.000001" placeholder="Longitude">
+            <br>
+            <label>Speed (km/h):</label>
+            <input type="number" id="speed" value="60" placeholder="Speed">
+            <br>
+            <label>Heading (degrees):</label>
+            <input type="number" id="heading" value="90" placeholder="Heading">
+            <br>
+            <label>Driver Name:</label>
+            <input type="text" id="driverName" value="Alex JMB - GPS Live Test" placeholder="Driver Name">
+            <br><br>
+            <button onclick="sendGPSUpdate()">Send GPS Update</button>
+            <button onclick="startAutoUpdates()">Start Auto Updates (1s)</button>
+            <button onclick="stopAutoUpdates()">Stop Auto Updates</button>
+        </div>
+
+        <div class="section">
+            <h3>📺 Live Log</h3>
+            <div id="log"></div>
+            <button onclick="clearLog()">Clear Log</button>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let autoUpdateInterval = null;
+
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function connect() {
+            const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+            const wsUrl = `${protocol}//${window.location.host}/gps-live`;
+            
+            log(`🔄 Connecting to ${wsUrl}...`);
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = function() {
+                document.getElementById('status').textContent = 'Connected ✅';
+                document.getElementById('status').style.color = '#4CAF50';
+                log('✅ Connected to GPS Live WebSocket');
+            };
+            
+            ws.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    log(`📡 Received: ${data.type} - ${JSON.stringify(data)}`);
+                } catch (e) {
+                    log(`📡 Received raw: ${event.data}`);
+                }
+            };
+            
+            ws.onclose = function() {
+                document.getElementById('status').textContent = 'Disconnected ❌';
+                document.getElementById('status').style.color = '#f44336';
+                log('❌ WebSocket connection closed');
+            };
+            
+            ws.onerror = function(error) {
+                log(`❌ WebSocket error: ${error}`);
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            stopAutoUpdates();
+        }
+
+        function sendGPSUpdate() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('❌ WebSocket not connected');
+                return;
+            }
+
+            const update = {
+                type: 'gps_update',
+                vehicleId: document.getElementById('vehicleId').value,
+                latitude: parseFloat(document.getElementById('latitude').value),
+                longitude: parseFloat(document.getElementById('longitude').value),
+                speed: parseInt(document.getElementById('speed').value),
+                heading: parseInt(document.getElementById('heading').value),
+                driverName: document.getElementById('driverName').value
+            };
+
+            ws.send(JSON.stringify(update));
+            log(`📍 Sent GPS update: Vehicle ${update.vehicleId} at (${update.latitude}, ${update.longitude})`);
+        }
+
+        function startAutoUpdates() {
+            if (autoUpdateInterval) {
+                clearInterval(autoUpdateInterval);
+            }
+
+            autoUpdateInterval = setInterval(() => {
+                // Simulate slight movement
+                const lat = parseFloat(document.getElementById('latitude').value);
+                const lng = parseFloat(document.getElementById('longitude').value);
+                
+                document.getElementById('latitude').value = (lat + (Math.random() - 0.5) * 0.001).toFixed(6);
+                document.getElementById('longitude').value = (lng + (Math.random() - 0.5) * 0.001).toFixed(6);
+                document.getElementById('speed').value = Math.floor(Math.random() * 80) + 20;
+                document.getElementById('heading').value = Math.floor(Math.random() * 360);
+                
+                sendGPSUpdate();
+            }, 1000); // Every second
+            
+            log('🔄 Started auto GPS updates (1 second interval)');
+        }
+
+        function stopAutoUpdates() {
+            if (autoUpdateInterval) {
+                clearInterval(autoUpdateInterval);
+                autoUpdateInterval = null;
+                log('⏹️ Stopped auto GPS updates');
+            }
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        // Auto-connect on page load
+        window.onload = function() {
+            log('🚀 GPS Live Test Ready - Click Connect to start');
+        };
+    </script>
+</body>
+</html>
